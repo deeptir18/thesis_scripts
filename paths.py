@@ -21,9 +21,10 @@ CAPACITY = "CAPACITY"
 INGRESS = "INGRESS"
 TPUT = "TPUT"
 QUEUEING_DELAY = "QUEUEING_DELAY"
-AVG = "AVG"
-MEDIAN = "MEDIAN"
-PERCENTILE_95 = "95TH"
+AVG = "AVGDELAY"
+MEDIAN = "MEDIANDELAY"
+PERCENTILE_95 = "95THDELAY"
+THESIS_SCRIPTS = "/home/ubuntu/thesis_scripts"
 """
 Starts the quic server running a certain congestion control algorithm.
 Assumes it is serving data from /tmp
@@ -86,6 +87,35 @@ def mm_graph_save(logfile, delay, plot_title, args=[]):
     return mm_graph_log
 
 """
+FOR MULTIPLE FLOW MMGRAPH TEST
+Makes mm_graph without moving it to a directory; also saves the mm-graph output
+RETURNS mm-graph-log name
+"""
+def mulflow_mm_graph_save(logfile, delay, plot_title, ports, args=[]):
+    port_str = ",".join([str(port) for port in ports])
+    mm_graph_save(logfile, delay, plot_title, ["--ports", port_str, "--no-delay"]) # do not plot delay
+"""
+Makes mm_graph without moving it to a directory; also saves the mm-graph output
+RETURNS mm-graph-log name
+"""
+def mm_graph_save(logfile, delay, plot_title, args=[]):
+    main_args = ["mm-graph", logfile, str(delay), "--no-display", "--title", plot_title, "--key"]
+    main_args.extend(args)
+    mm_graph_log = logfile.replace("log", "mm-graph-log")
+    main_args.extend([">", mm_graph_log, "2>&1"])
+    sh.check_output(" ".join(main_args), shell=True)
+    return mm_graph_log
+
+"""
+    main_args = ["mm-graph", logfile, str(delay), "--no-display", "--title", plot_title, "--key"]
+    main_args.extend(args)
+    mm_graph_log = logfile.replace("log", "mm-graph-log")
+    main_args.extend([">", mm_graph_log, "2>&1"])
+    sh.check_output(" ".join(main_args), shell=True)
+    return mm_graph_log
+
+"""
+"""
 Parses the mahimahi mm-graph log and returns a dictionary of the avg throughput/delay information
 """
 def parse_mm_graph(mm_graph_log):
@@ -107,7 +137,9 @@ def start_ccp_congavoid(alg, ccp_logname):
 
 # start ccp bbr
 def start_ccp_bbr(logname):
-    return sh.Popen("{}/target/debug/bbr > {} 2>&1".format(BBR_ALG, logname), shell=True)
+    command = "{}/target/debug/bbr > {} 2>&1".format(BBR_ALG, logname)
+    print command
+    return sh.Popen(command, shell=True)
 
 # check if dir exists; otherwise create it
 def create_dir(dirname):
@@ -147,16 +179,49 @@ def parse_mm_graph_output(mm_graph_log):
     try:
         delay_term = data[4].split(" ")[5]
         delays = [float(x) for x in delay_term.split("/")]
-        ret[QUEUEING_DELAY] = {AVG: delays[0], MEDIAN: delays[1], PERCENTILE_95: delays[2]}
+        ret[AVG] = delays[0]
+        ret[MEDIAN] = delays[1]
+        ret[PERCENTILE_95] = delays[2]
     except:
-        ret[QUEUEING_DELAY] = {}
+        ret[AVG] = 0
+        ret[MEDIAN] = 0
+        ret[PERCENTILE_95] = 0
 
     return ret
 
 
+def parse_client_time(logname):
+    cat = sh.Popen(["cat {}".format(logname)], shell = True, stdout=sh.PIPE)
+    grep = sh.Popen(["grep 'Number of seconds elapsed'"], shell = True, stdin = cat.stdout, stdout=sh.PIPE)
+    cat.stdout.close()
+    output = grep.communicate()[0]
+    try:
+        return output.split(": ")[1].strip()
+    except:
+        return "0"
 
+"""
+Returns a list of cwnd files.
+QUIC writes cwnd files for each flow to a file titled "cwnd_{}" where {} is the port number.
+"""
+def find_cwnd_file():
+    ret = []
+    for filename in os.listdir(THESIS_SCRIPTS):
+        if "cwnd_" in filename and ".txt" in filename:
+            ret.append(filename)
+    return ret
 
+def rm_cwnd_files():
+    for filename in find_cwnd_file():
+        sh.check_output("rm {}".format(filename), shell=True)
 
-    
+"""
+"""
+def parse_port_num(cwnd_file):
+    return int(cwnd_file.split("_")[1].split(".")[0])
 
+def find_port_numbers():
+    cwnd_files = find_cwnd_file()
+    ports = [parse_port_num(x) for x in find_cwnd_file()]
+    return ports
 
