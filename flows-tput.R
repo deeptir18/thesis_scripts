@@ -9,9 +9,17 @@ tputs <- subset(tputs)
 summarized <- ddply(tputs, c("NumFlows", "Impl", "Alg"), summarise, m=mean(Throughput), sd=sd(Throughput))
 
 dodge <- position_dodge(width=0.9)
-ggplot(summarized, aes(x=factor(NumFlows), y=m)) + 
-	geom_col(aes(x=factor(NumFlows), y=m, fill=Impl), position=dodge) +
-    geom_errorbar(aes(ymin=m-sd,ymax=m+sd), position=dodge) +
+ggplot(
+    summarized, 
+    aes(
+        x=factor(NumFlows), 
+        y=m,
+        ymin=m-sd,
+        ymax=m+sd,
+        fill=Impl,
+    )) + 
+	geom_col(position=dodge) +
+    geom_errorbar(position=dodge) +
     scale_fill_brewer(
          type="qual",
          labels=c(
