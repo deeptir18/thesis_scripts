@@ -13,7 +13,7 @@ import os
 import paths
 import argparse
 from cwnd import parse_cwnd
-RESULTS_DIR = "/home/ubuntu/thesis_scripts/fidelity"
+RESULTS_DIR = "/home/ubuntu/thesis_results/fidelity"
 VERIZON_LTE_SHORT= "/home/ubuntu/mahimahi/traces/Verizon-LTE-short.down"
 CELLULAR = "cellular"
 LOSSY = "lossy"
@@ -33,7 +33,10 @@ IS_CCP = "IS_CCP"
 BANDWIDTHS = [12, 24, 48, 60, 96]
 DELAYS = [10, 50, 100, 200]
 CELLULAR_BUF = 100
-
+def get_cwnd_file():
+    cwnd_files = paths.find_cwnd_file()
+    assert(len(cwnd_files) == 1)
+    return cwnd_files[0]
 def pick_filesize(bw, delay):
     pass
 
@@ -117,6 +120,7 @@ def fixed_log_prefix(bw, delay, alg, filesize, trial, is_ccp, results_dir):
 @stats_file: do we record all the mm-graph statistics somewhere
 """
 def run_single_fixed_exp(bw, delay, alg, filename, filesize, trial, results_dir, is_ccp, graph_cwnd, stats_file = None):
+    paths.rm_cwnd_files()
     kill_rogue_processes()
     downlink_log = "{}.log".format(fixed_log_prefix(bw, delay, alg, filesize, trial, is_ccp, results_dir))
     epslog = "{}.eps".format(fixed_log_prefix(bw, delay, alg, filesize, trial, is_ccp, results_dir))
@@ -131,7 +135,13 @@ def run_single_fixed_exp(bw, delay, alg, filename, filesize, trial, results_dir,
     if is_ccp:
         ccp_logname = "{}.ccp-log".format(fixed_exp_prefix(bw, delay, alg, filesize, trial, results_dir))
         if alg == RENO or alg == CUBIC:
-            paths.start_ccp_congavoid(alg, ccp_logname)
+            if alg == RENO:
+                ccp_options = "deficit_timeout=2"
+
+                paths.start_ccp_congavoid(alg, ccp_logname, ccp_options)
+            else:
+                paths.start_ccp_congavoid(alg, ccp_logname)
+
         else: # alg must be BBR
             paths.start_ccp_bbr(ccp_logname)
         paths.start_quic_server("ccp")
@@ -156,7 +166,7 @@ def run_single_fixed_exp(bw, delay, alg, filename, filesize, trial, results_dir,
     if graph_cwnd:
         time.sleep(10)
         cwnd_log = "{}.cwnd-log".format(fixed_log_prefix(bw, delay, alg, filesize, trial, is_ccp, results_dir))
-        paths.move_file(CWND_FILE, cwnd_log)
+        paths.move_file(get_cwnd_file(), cwnd_log)
 
     # produce the mm-graph, and parse throughput delay information
     mm_graph_log = paths.mm_graph_save(downlink_log, int(delay*2), plot_title)
@@ -221,6 +231,7 @@ Runs full cellular eperiment.
 @results_dir: where to put all the logs
 """
 def run_single_cellular_exp(trace, delay, alg, filename, filesize, trial, graph_cwnd, is_ccp, results_dir, trace_name="VERIZON_LTE_SHORT", stats_file = None):
+    paths.rm_cwnd_files()
     kill_rogue_processes()
     downlink_log = "{}.log".format(cellular_log_prefix(trace_name, delay, alg, filesize, trial, is_ccp, results_dir))
     epslog = "{}.eps".format(cellular_log_prefix(trace_name, delay, alg, filesize, trial, is_ccp, results_dir))
@@ -257,7 +268,7 @@ def run_single_cellular_exp(trace, delay, alg, filename, filesize, trial, graph_
     if graph_cwnd:
         time.sleep(10)
         cwnd_log = "{}.cwnd-log".format(cellular_log_prefix(trace_name, delay, alg, filesize, trial, is_ccp, results_dir))
-        paths.move_file(CWND_FILE, cwnd_log)
+        paths.move_file(get_cwnd_file(), cwnd_log)
 
     # produce the mm-graph, and parse throughput delay information
     mm_graph_log = paths.mm_graph_save(downlink_log, int(delay*2), plot_title)
@@ -319,6 +330,7 @@ Adds .0001 loss for this experiment.
 @graph_cwnd: boolean - do we make a cwnd log?
 """
 def run_single_lossy_exp(bw, delay, alg, filename, filesize, trial, results_dir, is_ccp, graph_cwnd, stats_file = None):
+    paths.rm_cwnd_files()
     kill_rogue_processes()
     downlink_log = "{}.log".format(lossy_log_prefix(bw, delay, alg, filesize, trial, is_ccp, results_dir))
     epslog = "{}.eps".format(lossy_log_prefix(bw, delay, alg, filesize, trial, is_ccp, results_dir))
@@ -353,8 +365,8 @@ def run_single_lossy_exp(bw, delay, alg, filename, filesize, trial, results_dir,
     # move the cwnd log to the correct place
     if graph_cwnd:
         time.sleep(10)
-        cwnd_log = "{}cwnd_logE.cwnd-log".format(lossy_log_prefix(bw, delay, alg, filesize, trial, is_ccp, results_dir))
-        paths.move_file(CWND_FILE, cwnd_log)
+        cwnd_log = "{}.cwnd-log".format(lossy_log_prefix(bw, delay, alg, filesize, trial, is_ccp, results_dir))
+        paths.move_file(get_cwnd_file(), cwnd_log)
 
    # produce the mm-graph, and parse throughput delay information
     mm_graph_log = paths.mm_graph_save(downlink_log, int(delay*2), plot_title)
@@ -440,6 +452,7 @@ def write_stats_file(fd, info):
 
     data.append(info[IS_CCP])
     fd.write("{}\n".format(",".join(data)))
+    fd.flush()
 
 """
 Sets up file that stores statistics.
@@ -472,11 +485,18 @@ def main():
     paths.create_dir(RESULTS_DIR)
 
     if args.scenario == FIXED:
+        #for bw in [12]:
         for bw in [12, 24, 48, 96]:
+            #for delay in [10]:
             for delay in [10, 50]:
+                if bw == 12 and delay == 10:
+                    continue
                 if bw == 96 or (bw == 48 and delay ==  50):
                     filesize = 100
                     filename = "100MB.html"
+                elif bw == 12 and delay == 10:
+                    filesize = 25
+                    filename = "25MB.html"
                 else:
                     filesize = 50
                     filename = "100MB.html"

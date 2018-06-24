@@ -20,17 +20,22 @@ def parse_cwnd(ccp_file, other_file, out):
     outfile.write("count,time,cwnd,Impl\n")
     for line in ccp_data:
         line_data = line.split(",")
-        cwnd=line_data[1]
-        time=line_data[0]
-        time_seconds = float(time)
-        outfile.write("{},{},{},{}\n".format(count,time_seconds,cwnd,ccp_string))
-        count += 1
+        try:
+            cwnd=line_data[1]
+            time=line_data[0]
+            time_seconds = float(time)
+            outfile.write("{},{},{},{}\n".format(count,time_seconds,cwnd,ccp_string))
+            count += 1
+        except:
+            continue
     for line in other_data:
-        line_data = line.split(",")
-        cwnd=line_data[1]
-        time=line_data[0]
-        time_seconds = float(time)
-        outfile.write("{},{},{},{}\n".format(count,time_seconds,cwnd,other_string))
-        count += 1
+        try:
+            line_data = line.split(",")
+            cwnd=line_data[1]
+            time=line_data[0]
+            time_seconds = float(time)
+            outfile.write("{},{},{},{}\n".format(count,time_seconds,cwnd,other_string))
+            count += 1
+        except:
+            continue
     outfile.close()
-

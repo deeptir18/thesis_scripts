@@ -18,19 +18,22 @@ import paths
 
 NUM_CLIENTS = [1,2,3,4,5,10]
 #NUM_CLIENTS = [2,3]
-RESULTS_DIR = "/home/ubuntu/thesis_scripts/scalability"
+RESULTS_DIR = "/home/ubuntu/thesis_results/scalability2"
 THROUGHPUT = "THROUGHPUT"
 TIME_TAKEN = "TIME"
 BYTES = "BYTES"
+NUM_TRIALS = 5
 def kill_rogue_processes():
     paths.kill_process("reno")
     paths.kill_process("cubic")
     paths.kill_process("quic_server")
 
 def get_ccp_logname(num_clients, alg, filesize, trial):
-    return "{}Cl_{}_{}MB_T{}.ccp-log".format(client, num_clients, alg, filesize, trial)
+    return "{}Cl_{}_{}MB_T{}.ccp-log".format(num_clients, num_clients, alg, filesize, trial)
 
-def client_logname(client, num_clients, alg, filesize, trial):
+def client_logname(client, num_clients, alg, filesize, trial, is_ccp):
+    if is_ccp:
+            alg = "ccp{}".format(alg)
     return "{}-{}Cl_{}_{}MB_T{}.log".format(client, num_clients, alg, filesize, trial)
 
 def MB_to_bytes(MB):
@@ -71,7 +74,7 @@ def run_single_exp(results_folder, num_clients, alg, is_ccp, filename, filesize,
     time.sleep(10)
     client_procs = []
     for i in range(num_clients):
-        client_process = start_localhost_client(filename, client_logname(i, num_clients, alg, filesize, trial))
+        client_process = start_localhost_client(filename, client_logname(i, num_clients, alg, filesize, trial, is_ccp))
         client_procs.append(client_process)
     for proc in client_procs:
         proc.wait()
@@ -79,13 +82,14 @@ def run_single_exp(results_folder, num_clients, alg, is_ccp, filename, filesize,
     if is_ccp:
         paths.kill_process(alg)
         paths.move_file(get_ccp_logname(num_clients, alg, filesize, trial), results_folder)
+        paths.rm_cwnd_files() # cleanup
     
     paths.kill_process("quic_server")
 
     # now go through client logs and get the timing information
     client_data = []
     for i in range(num_clients):
-        logname = client_logname(i, num_clients, alg, filesize, trial)
+        logname = client_logname(i, num_clients, alg, filesize, trial, is_ccp)
         data = parse_time(logname)
         paths.move_file(logname, results_folder)
         try:
@@ -109,19 +113,26 @@ def get_sum_throughput(client_data, num_clients):
 # run experiment to get graph for (num-clients, avg-throughput)
 def main():
     paths.reset_results(RESULTS_DIR)
-    csv_file = open("scalability.csv", "w")
-    csv_file.write("NumFlows Throughput\n")
-    for num in NUM_CLIENTS:
-	for i in range(5):
-		data = run_single_exp(RESULTS_DIR, num, "reno", False, "100MB.html", 100, i)
-		if get_sum_throughput(data, num) != 0:
-	    		csv_file.write("{} {}\n".format(num, get_sum_throughput(data, num)))
+    csv_file = open("scalability2.csv", "w")
+    csv_file.write("NumFlows Throughput Alg Impl\n")
+    algs = ["reno", "cubic"]
+    for is_ccp in [True, False]:
+        for alg in algs:
+            for num in NUM_CLIENTS:
+	        for i in range(NUM_TRIALS):
+		    data = run_single_exp(RESULTS_DIR, num, alg, is_ccp, "100MB.html", 100, i)
+		    if get_sum_throughput(data, num) != 0:
+			if is_ccp:
+			    impl = "ccp"
+			else:
+			    impl = "quic"
+	    	    	csv_file.write("{} {} {} {}\n".format(num, get_sum_throughput(data, num), alg, impl))
     csv_file.close()
     # call the R script
     time.sleep(10)
-    sh.check_output("./flows-tput.R scalability.csv scalability.pdf", shell=True)
-    paths.move_file("scalability.pdf", RESULTS_DIR)
-    paths.move_file("scalability.csv", RESULTS_DIR)
+    sh.check_output("./flows-tput.R scalability2.csv scalability2.pdf", shell=True)
+    paths.move_file("scalability2.pdf", RESULTS_DIR)
+    paths.move_file("scalability2.csv", RESULTS_DIR)
     
 
 if __name__ == '__main__':

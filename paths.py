@@ -13,6 +13,8 @@ QUIC_CLIENT = "/home/ubuntu/chromium2/src/out/Default/quic_client"
 CHROMIUM_SRC = "/home/ubuntu/chromium2/src/"
 CCP_EXAMPLE_ALG = "/home/ubuntu/ccp_example_alg/flat_rate_cwnd/target/debug/ccp_example_alg"
 BBR_ALG = "/home/ubuntu/bbr"
+COPA_ALG = "/home/ubuntu/ccp_copa/target/debug/copa"
+
 DATA_DIR = "/tmp/quic-data/www.example.org/"
 MSS = 1460
 SLEEPTIME = 10
@@ -132,8 +134,15 @@ def kill_process(name):
     except:
         return
 # start ccp cong avoid with specific alg
-def start_ccp_congavoid(alg, ccp_logname):
-    return sh.Popen("{}/ccp_generic_cong_avoid/target/debug/{} > {} 2>&1".format(PORTUS_PATH, alg, ccp_logname), shell=True)
+def start_ccp_congavoid(alg, ccp_logname, ccp_options = None):
+    if not ccp_options:
+        return sh.Popen("{}/ccp_generic_cong_avoid/target/debug/{} > {} 2>&1".format(PORTUS_PATH, alg, ccp_logname), shell=True)
+    else:
+        if alg == "reno":
+            ccp_options += " --deficit_timeout=2"
+        print "ccp_options: {}".format(ccp_options)
+        return sh.Popen("{}/ccp_generic_cong_avoid/target/debug/{} --{} > {} 2>&1".format(PORTUS_PATH, alg, ccp_options, ccp_logname), shell=True)
+
 
 # start ccp bbr
 def start_ccp_bbr(logname):
@@ -141,6 +150,11 @@ def start_ccp_bbr(logname):
     print command
     return sh.Popen(command, shell=True)
 
+# start ccp copa
+def start_ccp_copa(logname):
+    command = "{} > {} 2>&1".format(COPA_ALG, logname)
+    print command
+    return sh.Popen(command, shell=True)
 # check if dir exists; otherwise create it
 def create_dir(dirname):
     if not os.path.isdir(dirname):
